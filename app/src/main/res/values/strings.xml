@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">PolitecnicosGalactic</string>
+    <!-- Líneas a añadir -->
+    <string name="background_image_desc">Background image</string>
+    <string name="stars_overlay_desc">Stars overlay image</string>
+</resources>
