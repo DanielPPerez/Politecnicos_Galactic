@@ -65,4 +65,3 @@ class GameThread(private val surfaceHolder: SurfaceHolder, private val gameView:
         }
     }
 }
-

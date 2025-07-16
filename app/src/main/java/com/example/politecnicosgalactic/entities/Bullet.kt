@@ -7,7 +7,6 @@ import android.graphics.Canvas
 import android.graphics.Rect
 import com.example.politecnicosgalactic.R
 
-// <<< NUEVO: Enum para definir el tipo de propietario de la bala >>>
 enum class BulletOwner {
     PLAYER,
     ENEMY
@@ -17,7 +16,6 @@ class Bullet(
     context: Context,
     startX: Int,
     startY: Int,
-    // <<< NUEVO: Parámetro para indicar quién dispara >>>
     val owner: BulletOwner
 ) {
 
@@ -32,20 +30,21 @@ class Bullet(
     val collisionRect: Rect
 
     init {
-        // <<< NUEVO: Elegir la imagen y velocidad según el propietario >>>
         if (owner == BulletOwner.PLAYER) {
-            bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.missile_a)
-            speedY = -30 // Hacia arriba
+            bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.player_bullet1)
+            speedY = -30
+            // Dejamos la bala del jugador pequeña
+            width = bitmap.width
+            height = bitmap.height
         } else { // ENEMY
-            bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.bullet)
-            speedY = 20  // Hacia abajo
+            bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.enemy_bullet2)
+            speedY = 20
+            // --- AJUSTE: Aumentar el tamaño de la bala enemiga ---
+            // Ahora la bala será la mitad del tamaño original, en lugar de un cuarto.
+            width = bitmap.width
+            height = bitmap.height
         }
 
-        // <<< MODIFICADO: Reducimos el tamaño de las balas >>>
-        // Ahora las balas serán 1/4 de su tamaño original, haciéndolas más pequeñas.
-        // Puedes ajustar el divisor (ej. /3, /4) para cambiar el tamaño.
-        width = bitmap.width / 4
-        height = bitmap.height / 4
         bitmap = Bitmap.createScaledBitmap(bitmap, width, height, false)
 
         // Posicionar la bala en el punto de origen (centrada)

@@ -7,50 +7,110 @@ import android.graphics.Canvas
 import android.graphics.Rect
 import com.example.politecnicosgalactic.R
 
-class Player(context: Context, screenWidth: Int, screenHeight: Int) {
+class Player(context: Context, private val screenWidth: Int, screenHeight: Int) {
 
-    // Imagen de la nave
-    var bitmap: Bitmap
+    // --- MODIFICADO: Enum TiltState eliminado ya que no hay animación de inclinación ---
 
-    // Posición y dimensiones
-    var x: Int
-    var y: Int
+    enum class MovementState {
+        IDLE,
+        MOVING_LEFT,
+        MOVING_RIGHT
+    }
+    var movementState: MovementState = MovementState.IDLE
+
+    var isInvincible = false
+    private var invincibilityTimer = 0f
+    private val invincibilityDuration = 2.0f // 2 segundos de invencibilidad
+
+    // --- MODIFICADO: Simplificado a un solo bitmap ---
+    private val bitmap: Bitmap
+    var x: Float
+    var y: Float
     var width: Int
     var height: Int
 
-    // Rectángulo de colisión (lo usaremos más adelante)
+    // --- ELIMINADO: Propiedades de animación ya no son necesarias ---
+    // private val frameWidth: Int
+    // private val frameHeight: Int
+    // private var currentThrusterFrame = 0
+    // private var tiltState = TiltState.STRAIGHT
+    // private var lastFrameChangeTime = 0L
+    // private val animationDelay = 50L
+    // companion object { ... }
+
+    private val speed = 800f
     val collisionRect: Rect
 
     init {
-        // Cargar la imagen de la nave desde los recursos
-        bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.ship_1a_medium)
+        // --- MODIFICADO: Carga y escalado de una sola imagen ---
+        val originalBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.ship1blue)
 
-        // Escalar la nave a un tamaño razonable (ej. 1/10 del ancho de la pantalla)
-        val originalWidth = bitmap.width
-        val originalHeight = bitmap.height
+        // Escalar la nave a un tamaño razonable
         width = screenWidth / 10
-        height = (width * originalHeight) / originalWidth // Mantener proporción
-        bitmap = Bitmap.createScaledBitmap(bitmap, width, height, false)
+        // Calcular la altura manteniendo la proporción de la imagen original
+        height = (width * originalBitmap.height) / originalBitmap.width
 
-        // Posicionar la nave inicialmente
-        // Centrada horizontalmente y en la parte inferior de la pantalla
-        x = (screenWidth / 2) - (width / 2)
-        y = screenHeight - height - 50 // Un pequeño margen desde abajo
+        // Crear el bitmap escalado final
+        bitmap = Bitmap.createScaledBitmap(originalBitmap, width, height, false)
 
-        // Inicializar el rectángulo de colisión
-        collisionRect = Rect(x, y, x + width, y + height)
+        // Posición inicial
+        x = (screenWidth / 2f) - (width / 2f)
+        y = screenHeight - height - (screenHeight * 0.20f)
+
+        collisionRect = Rect(x.toInt(), y.toInt(), (x + width).toInt(), (y + height).toInt())
     }
 
-    // Actualiza el estado del jugador (por ahora, solo el rectángulo de colisión)
-    fun update() {
-        collisionRect.left = x
-        collisionRect.top = y
-        collisionRect.right = x + width
-        collisionRect.bottom = y + height
+    fun update(deltaTime: Float) {
+        // Manejo del temporizador de invencibilidad
+        if (isInvincible) {
+            invincibilityTimer -= deltaTime
+            if (invincibilityTimer <= 0) {
+                isInvincible = false
+            }
+        }
+
+        // --- MODIFICADO: La lógica de movimiento ya no actualiza el estado de inclinación ---
+        when (movementState) {
+            MovementState.MOVING_LEFT -> {
+                x -= speed * deltaTime
+            }
+            MovementState.MOVING_RIGHT -> {
+                x += speed * deltaTime
+            }
+            MovementState.IDLE -> {
+                // No hace nada cuando está quieto
+            }
+        }
+
+        // Limitar la nave a los bordes de la pantalla
+        x = x.coerceIn(0f, (screenWidth - width).toFloat())
+
+        // --- ELIMINADO: Lógica de animación de propulsores ---
+
+        // Actualizar el rectángulo de colisión
+        collisionRect.left = x.toInt()
+        collisionRect.top = y.toInt()
+        collisionRect.right = (x + width).toInt()
+        collisionRect.bottom = (y + height).toInt()
     }
 
-    // Dibuja la nave en el lienzo
     fun draw(canvas: Canvas) {
-        canvas.drawBitmap(bitmap, x.toFloat(), y.toFloat(), null)
+        // Efecto de parpadeo si es invencible (se mantiene)
+        if (isInvincible) {
+            if ((System.currentTimeMillis() / 100) % 2 == 0L) {
+                return // No dibuja la nave en este frame para crear el parpadeo
+            }
+        }
+
+        // --- MODIFICADO: Dibuja la imagen estática directamente ---
+        canvas.drawBitmap(bitmap, x, y, null)
+    }
+
+    // Método para cuando el jugador es golpeado (se mantiene)
+    fun takeHit() {
+        if (!isInvincible) {
+            isInvincible = true
+            invincibilityTimer = invincibilityDuration
+        }
     }
 }

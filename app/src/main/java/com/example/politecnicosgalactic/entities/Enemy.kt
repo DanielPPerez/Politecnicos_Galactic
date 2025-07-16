@@ -6,59 +6,75 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Rect
 import com.example.politecnicosgalactic.R
+import kotlin.math.sin
 import kotlin.random.Random
 
 class Enemy(context: Context, private val screenWidth: Int, screenHeight: Int) {
 
-    var bitmap: Bitmap
-    var x: Int
-    var y: Int
-    var width: Int
-    var height: Int
-    private val speedY: Int
+    private val bitmap: Bitmap
+    var x: Float
+    var y: Float
+    val width: Int
+    val height: Int
+
+    private val speedY: Float
+
+    private val initialX: Float
+    private val amplitude: Float
+    private val frequency: Float
+    private var time: Float = 0f
+
+    var canShoot = false
+        private set
+    private var shootTimer: Long = 0L
+    private val shootInterval: Long
+
     val collisionRect: Rect
 
-    // <<< NUEVO: Variables para el disparo del enemigo >>>
-    private var shootTimer = 0L
-    // El enemigo disparará en un intervalo aleatorio entre 2 y 5 segundos
-    private val shootInterval = Random.nextLong(2000, 5000)
-    // Bandera para saber si el enemigo está listo para disparar
-    var canShoot = false
-
     init {
-        bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.enemy_3a_medium)
-        val originalWidth = bitmap.width
-        val originalHeight = bitmap.height
+        val originalBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.enemy1a)
         width = screenWidth / 12
-        height = (width * originalHeight) / originalWidth
-        bitmap = Bitmap.createScaledBitmap(bitmap, width, height, false)
+        height = (width * originalBitmap.height) / originalBitmap.width
+        bitmap = Bitmap.createScaledBitmap(originalBitmap, width, height, false)
 
-        speedY = Random.nextInt(5, 12)
-        x = Random.nextInt(0, screenWidth - width)
-        y = -height
+        x = Random.nextInt(0, screenWidth - width).toFloat()
+        y = -height.toFloat()
 
-        collisionRect = Rect(x, y, x + width, y + height)
+        initialX = x
+        amplitude = Random.nextInt(50, screenWidth / 4).toFloat()
+        frequency = Random.nextFloat() * 2f + 1f
+
+        // --- AJUSTE: Reducir la velocidad vertical de las naves ---
+        speedY = Random.nextInt(80, 200).toFloat() // Era 150-400
+
+        shootInterval = Random.nextLong(1500, 4000)
+
+        collisionRect = Rect(x.toInt(), y.toInt(), x.toInt() + width, y.toInt() + height)
     }
 
-    // <<< MODIFICADO: El método update ahora también gestiona el temporizador de disparo >>>
-    fun update(deltaTime: Long) {
-        y += speedY
-        collisionRect.left = x
-        collisionRect.top = y
-        collisionRect.right = x + width
-        collisionRect.bottom = y + height
+    fun update(deltaTime: Float) {
+        y += speedY * deltaTime
+        time += deltaTime
+        x = initialX + amplitude * sin(time * frequency)
+        x = x.coerceIn(0f, (screenWidth - width).toFloat())
 
-        // Actualizar el temporizador de disparo
-        shootTimer += deltaTime
+        shootTimer += (deltaTime * 1000).toLong()
         if (shootTimer >= shootInterval) {
-            // Cuando el temporizador se cumple, activamos la bandera
             canShoot = true
-            // Reiniciamos el temporizador para el próximo disparo
             shootTimer = 0L
         }
+
+        collisionRect.left = x.toInt()
+        collisionRect.top = y.toInt()
+        collisionRect.right = x.toInt() + width
+        collisionRect.bottom = y.toInt() + height
     }
 
     fun draw(canvas: Canvas) {
-        canvas.drawBitmap(bitmap, x.toFloat(), y.toFloat(), null)
+        canvas.drawBitmap(bitmap, x, y, null)
+    }
+
+    fun resetShootFlag() {
+        canShoot = false
     }
 }
