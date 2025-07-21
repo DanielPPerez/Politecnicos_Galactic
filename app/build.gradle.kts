@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.politecnicosgalactic"
+    namespace = "com.test.galaxyUP"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.politecnicosgalactic"
+        applicationId = "com.test.galaxyUP"
         minSdk = 23
         targetSdk = 35
         versionCode = 1
@@ -25,6 +25,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
     }
     compileOptions {
