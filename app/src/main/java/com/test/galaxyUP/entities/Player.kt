@@ -34,6 +34,11 @@ class Player(context: Context, private val screenWidth: Int, private val screenH
     val collisionRect: Rect
     private val context: Context
 
+    // --- OPTIMIZACIÓN DE MOVIMIENTO SUAVE ---
+    private var currentSpeedX = 0f
+    private val acceleration = 1800f // Valor ajustable para suavidad
+    private val deceleration = 2200f // Valor ajustable para frenado
+
     init {
         this.context = context
         val defaultSkinRes = R.drawable.ship1blue
@@ -80,11 +85,28 @@ class Player(context: Context, private val screenWidth: Int, private val screenH
                 isInvincible = false
             }
         }
+        // --- MOVIMIENTO SUAVE CON ACELERACIÓN ---
         when (movementState) {
-            MovementState.MOVING_LEFT -> x -= speed * deltaTime
-            MovementState.MOVING_RIGHT -> x += speed * deltaTime
-            MovementState.IDLE -> {}
+            MovementState.MOVING_LEFT -> {
+                currentSpeedX -= acceleration * deltaTime
+                if (currentSpeedX < -speed) currentSpeedX = -speed
+            }
+            MovementState.MOVING_RIGHT -> {
+                currentSpeedX += acceleration * deltaTime
+                if (currentSpeedX > speed) currentSpeedX = speed
+            }
+            MovementState.IDLE -> {
+                // Deceleración suave hacia 0
+                if (currentSpeedX > 0) {
+                    currentSpeedX -= deceleration * deltaTime
+                    if (currentSpeedX < 0) currentSpeedX = 0f
+                } else if (currentSpeedX < 0) {
+                    currentSpeedX += deceleration * deltaTime
+                    if (currentSpeedX > 0) currentSpeedX = 0f
+                }
+            }
         }
+        x += currentSpeedX * deltaTime
         x = x.coerceIn(0f, (screenWidth - width).toFloat())
         collisionRect.set(x.toInt(), y.toInt(), x.toInt() + width, y.toInt() + height)
     }
@@ -131,3 +153,4 @@ class Player(context: Context, private val screenWidth: Int, private val screenH
         }
     }
 }
+

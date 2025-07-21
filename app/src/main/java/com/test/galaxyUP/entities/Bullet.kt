@@ -16,7 +16,7 @@ class Bullet(
     context: Context,
     startX: Int,
     startY: Int,
-    val owner: BulletOwner
+    var owner: BulletOwner
 ) {
 
     var bitmap: Bitmap
@@ -54,7 +54,7 @@ class Bullet(
         collisionRect = Rect(x, y, x + width, y + height)
     }
 
-    fun update() {
+    fun update(deltaTime: Float) {
         y += speedY
         collisionRect.left = x
         collisionRect.top = y

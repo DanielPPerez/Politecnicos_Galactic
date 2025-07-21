@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
+
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -75,14 +76,38 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
         textSize = 48f
         textAlign = Paint.Align.CENTER
     }
-    private var gameOverButtonRects: List<Rect>? = null
+    // --- OPTIMIZACIÓN: Rects de botones de Game Over ---
+    private val gameOverButtonRects: List<Rect> by lazy {
+        val btnW = (width * 0.5f).toInt(); val btnH = 120; val spacing = 40; val cX = (width / 2).toFloat(); val cY = (height / 2).toFloat(); val yStart = (cY + 120).toInt()
+        val rR = Rect(cX.toInt() - btnW / 2, yStart, cX.toInt() + btnW / 2, yStart + btnH)
+        val rM = Rect(cX.toInt() - btnW / 2, yStart + btnH + spacing, cX.toInt() + btnW / 2, yStart + 2 * btnH + spacing)
+        listOf(rR, rM)
+    }
     var gameOverAction: ((Int) -> Unit)? = null
 
     private var isSetup = false
 
+    // --- LIMITES DE ENTIDADES ---
+    private val MAX_ENEMIES = 40
+    private val MAX_ASTEROIDS = 30
+    private val MAX_BULLETS = 30
+
+    // --- OBJECT POOLING ---
+    private val enemyPool = ArrayDeque<Enemy>()
+    private val asteroidPool = ArrayDeque<Asteroid>()
+    private val bulletPool = ArrayDeque<Bullet>()
+
+    // --- SPATIAL PARTITIONING ---
+    private val gridSize = 300 // px
+    private val gridCols get() = (width / gridSize) + 1
+    private val gridRows get() = (height / gridSize) + 1
+    // --- CORRECCIÓN: Declarar como lateinit e inicializar en setupGame ---
+    private lateinit var spatialGrid: Array<MutableList<Any>>
+
     init {
         holder.addCallback(this)
         isFocusable = true
+        setLayerType(LAYER_TYPE_HARDWARE, null) // --- HARDWARE ACCELERATION ---
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
@@ -102,6 +127,9 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
     fun setupGame() {
         val screenWidth = width
         val screenHeight = height
+
+        // --- CORRECCIÓN: Inicializar el grid aquí, cuando width y height son correctos ---
+        spatialGrid = Array(gridCols * gridRows) { mutableListOf() }
 
         player = Player(context, screenWidth, screenHeight).apply {
             setSkin(selectedSkinRes)
@@ -138,12 +166,30 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
         parallaxLayers[0].setInitialPosition(0f)
         parallaxLayers[1].setInitialPosition(0f)
         parallaxLayers[2].setInitialPosition(-screenHeight / 2f)
-        parallaxLayers[6].setInitialPosition(0f)
+        parallaxLayers.last().setInitialPosition(0f)
     }
 
-    private fun spawnEnemy() { enemies.add(Enemy(context, width, height)) }
-    private fun spawnAsteroid() { asteroids.add(Asteroid(context, width, height)) }
-    private fun spawnBullet(owner: BulletOwner, startX: Float, startY: Float) { bullets.add(Bullet(context, startX.toInt(), startY.toInt(), owner)) }
+    private fun spawnEnemy() {
+        if (enemies.size >= MAX_ENEMIES) return
+        val enemy = if (enemyPool.isNotEmpty()) {
+            val reused = enemyPool.removeFirst()
+            reused.reset(width, height)
+            reused
+        } else Enemy(context, width, height)
+        enemies.add(enemy)
+    }
+
+    private fun spawnAsteroid() {
+        if (asteroids.size >= MAX_ASTEROIDS) return
+        val asteroid = if (asteroidPool.isNotEmpty()) asteroidPool.removeFirst() else Asteroid(context, width, height)
+        asteroids.add(asteroid)
+    }
+    private fun spawnBullet(owner: BulletOwner, startX: Float, startY: Float) {
+        if (bullets.size >= MAX_BULLETS) return
+        val bullet = if (bulletPool.isNotEmpty()) bulletPool.removeFirst() else Bullet(context, startX.toInt(), startY.toInt(), owner)
+        bullet.x = startX.toInt(); bullet.y = startY.toInt(); bullet.owner = owner
+        bullets.add(bullet)
+    }
     private fun spawnCoin() {
         val value = getRandomCoinValue()
         coins.add(Coin(context, width, height, value))
@@ -170,7 +216,7 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
     }
 
     private fun spawnMineWave(boss: Boss, gapPosition: Int) {
-        val numberOfColumns = 7
+        val numberOfColumns = 11
         val mineSize = width / numberOfColumns
         val startY = boss.y + boss.height
 
@@ -183,6 +229,23 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
     }
 
     private fun checkCollisions() {
+        // --- SPATIAL PARTITIONING: Limpiar grid ---
+        spatialGrid.forEach { it.clear() }
+        // --- Asignar entidades a celdas ---
+        fun gridIndex(x: Float, y: Float): Int {
+            val col = (x / gridSize).toInt().coerceIn(0, gridCols - 1)
+            val row = (y / gridSize).toInt().coerceIn(0, gridRows - 1)
+            return row * gridCols + col
+        }
+        enemies.forEach { spatialGrid[gridIndex(it.x, it.y)].add(it) }
+        asteroids.forEach { spatialGrid[gridIndex(it.x, it.y)].add(it) }
+        bullets.forEach { spatialGrid[gridIndex(it.x.toFloat(), it.y.toFloat())].add(it) }
+        coins.forEach { spatialGrid[gridIndex(it.x, it.y)].add(it) }
+        powerUps.forEach { spatialGrid[gridIndex(it.x, it.y)].add(it) }
+        mines.forEach { spatialGrid[gridIndex(it.x, it.y)].add(it) }
+        bosses.forEach { spatialGrid[gridIndex(it.x, it.y)].add(it) }
+        player?.let { spatialGrid[gridIndex(it.x, it.y)].add(it) }
+        // --- Colisiones solo entre entidades cercanas ---
         val bulletsToRemove = mutableListOf<Bullet>()
         val enemiesToRemove = mutableListOf<Enemy>()
         val asteroidsToRemove = mutableListOf<Asteroid>()
@@ -216,11 +279,19 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
             }
             for (bullet in bullets.filter { it.owner == BulletOwner.ENEMY }) { if (Rect.intersects(bullet.collisionRect, p.collisionRect)) { bulletsToRemove.add(bullet); handlePlayerHit() } }
             for (mine in mines) { if (Rect.intersects(mine.collisionRect, p.collisionRect)) { handlePlayerHit() } }
-            for (enemy in enemies) { if (Rect.intersects(enemy.collisionRect, p.collisionRect)) { enemiesToRemove.add(enemy); handlePlayerHit() } }
-            for (asteroid in asteroids) { if (Rect.intersects(asteroid.collisionRect, p.collisionRect)) { asteroidsToRemove.add(asteroid); handlePlayerHit() } }
-            for (coin in coins) { if (Rect.intersects(coin.collisionRect, p.collisionRect)) { coinsToRemove.add(coin); coinsCollected += coin.value } }
-            for (powerUp in powerUps) { if (Rect.intersects(powerUp.collisionRect, p.collisionRect)) { activatePowerUp(powerUp.type); powerUpsToRemove.add(powerUp) } }
-            for (boss in bosses) { if (boss.isAlive && Rect.intersects(boss.collisionRect, p.collisionRect)) { handlePlayerHit() } }
+            val idx = gridIndex(p.x, p.y)
+            val nearby = spatialGrid[idx]
+            // Aquí puedes agregar chequeo en celdas adyacentes si quieres más precisión
+            nearby.forEach {
+                when (it) {
+                    is Enemy -> if (Rect.intersects(p.collisionRect, it.collisionRect)) { enemiesToRemove.add(it); handlePlayerHit() }
+                    is Asteroid -> if (Rect.intersects(p.collisionRect, it.collisionRect)) { asteroidsToRemove.add(it); handlePlayerHit() }
+                    is Coin -> if (Rect.intersects(p.collisionRect, it.collisionRect)) { coinsToRemove.add(it); coinsCollected += it.value }
+                    is PowerUp -> if (Rect.intersects(p.collisionRect, it.collisionRect)) { activatePowerUp(it.type); powerUpsToRemove.add(it) }
+                    is Mine -> if (Rect.intersects(p.collisionRect, it.collisionRect)) { handlePlayerHit() }
+                    is Boss -> if (it.isAlive && Rect.intersects(p.collisionRect, it.collisionRect)) { handlePlayerHit() }
+                }
+            }
         }
 
         bullets.removeAll(bulletsToRemove)
@@ -228,6 +299,10 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
         asteroids.removeAll(asteroidsToRemove)
         coins.removeAll(coinsToRemove)
         powerUps.removeAll(powerUpsToRemove)
+        // --- Reciclar entidades eliminadas en pools ---
+        enemiesToRemove.forEach { enemies.remove(it); enemyPool.add(it) }
+        asteroidsToRemove.forEach { asteroids.remove(it); asteroidPool.add(it) }
+        bulletsToRemove.forEach { bullets.remove(it); bulletPool.add(it) }
     }
 
     private fun addScore(points: Int) {
@@ -309,8 +384,8 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
             }
         }
         mines.removeAll { it.y > height }; mines.forEach { it.update(deltaTime) }
-        bullets.removeAll { it.y < -it.height || it.y > height }; bullets.forEach { it.update() }
-        coins.removeAll { it.isOutOfScreen() }; coins.forEach { it.update() }
+        bullets.removeAll { it.y < -it.height || it.y > height }; bullets.forEach { it.update(deltaTime) }
+        coins.removeAll { it.isOutOfScreen() }; coins.forEach { it.update(deltaTime) }
         player?.update(deltaTime)
         checkCollisions()
     }
@@ -322,22 +397,25 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
         if (!isSetup) return
 
         canvas.let {
-            parallaxLayers.forEach { l -> l.draw(it) }; asteroids.forEach { a -> a.draw(it) }; enemies.forEach { e -> e.draw(it) }
-            bosses.forEach { b -> b.draw(it) }; mines.forEach { m -> m.draw(it) }; coins.forEach { c -> c.draw(it) }
-            powerUps.forEach { p -> p.draw(it) }
-            bullets.forEach { b -> b.draw(it) }
+            // --- OPTIMIZACIÓN VIEW CULLING ---
+            parallaxLayers.forEach { l -> l.draw(it) }
+            asteroids.filter { a -> a.y + a.height > 0 && a.y < height }.forEach { a -> a.draw(it) }
+            enemies.filter { e -> e.y + e.height > 0 && e.y < height }.forEach { e -> e.draw(it) }
+            bosses.filter { b -> b.y + b.height > 0 && b.y < height }.forEach { b -> b.draw(it) }
+            mines.filter { m -> m.y + m.height > 0 && m.y < height }.forEach { m -> m.draw(it) }
+            coins.filter { c -> c.y + c.height > 0 && c.y < height }.forEach { c -> c.draw(it) }
+            powerUps.filter { p -> p.y + p.height > 0 && p.y < height }.forEach { p -> p.draw(it) }
+            bullets.filter { b -> b.y + b.height > 0 && b.y < height }.forEach { b -> b.draw(it) }
             player?.draw(it)
             if (::hud.isInitialized) hud.draw(it, score, playerLives, gameTimeSeconds, coinsCollected)
             if (isGameOver) {
                 it.drawARGB(180, 0, 0, 0); val cX = (width / 2).toFloat(); val cY = (height / 2).toFloat()
                 it.drawText("GAME OVER", cX, cY, gameOverPaint)
-                val btnW = (width * 0.5f).toInt(); val btnH = 120; val spacing = 40; val yStart = (cY + 120).toInt()
-                val rR = Rect(cX.toInt() - btnW / 2, yStart, cX.toInt() + btnW / 2, yStart + btnH)
-                val rM = Rect(cX.toInt() - btnW / 2, yStart + btnH + spacing, cX.toInt() + btnW / 2, yStart + 2 * btnH + spacing)
-                gameOverButtonRects = listOf(rR, rM); it.drawRect(rR, gameOverButtonPaint); it.drawRect(rM, gameOverButtonPaint)
+                val rects = gameOverButtonRects
+                it.drawRect(rects[0], gameOverButtonPaint); it.drawRect(rects[1], gameOverButtonPaint)
                 val yOff = (gameOverButtonTextPaint.descent() + gameOverButtonTextPaint.ascent()) / 2
-                it.drawText("Volver a jugar", cX, rR.centerY() - yOff, gameOverButtonTextPaint)
-                it.drawText("Volver al menú", cX, rM.centerY() - yOff, gameOverButtonTextPaint)
+                it.drawText("Volver a jugar", cX, rects[0].centerY() - yOff, gameOverButtonTextPaint)
+                it.drawText("Volver al menú", cX, rects[1].centerY() - yOff, gameOverButtonTextPaint)
             }
         }
     }
@@ -346,7 +424,7 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
         if (!isSetup) return true
         if (isGameOver) {
             if (event.action == MotionEvent.ACTION_DOWN) {
-                gameOverButtonRects?.forEachIndexed { i, rect ->
+                gameOverButtonRects.forEachIndexed { i, rect ->
                     if (rect.contains(event.x.toInt(), event.y.toInt())) {
                         gameOverAction?.invoke(i); return true
                     }
@@ -357,6 +435,7 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
         val touchX = event.x
         player?.movementState = if (touchX > width / 2f) Player.MovementState.MOVING_RIGHT else Player.MovementState.MOVING_LEFT
         if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+            // --- CORRECCIÓN: Añadido 'Player.' que faltaba ---
             player?.movementState = Player.MovementState.IDLE
         }
         return true
@@ -389,3 +468,4 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
         }
     }
 }
+

@@ -25,12 +25,14 @@ class Asteroid(context: Context, private val screenWidth: Int, screenHeight: Int
     private var currentRotation: Float = 0f
     var isAlive: Boolean = true
 
+    // --- OPTIMIZACIÓN: Reutilizar el objeto Matrix ---
+    private val matrix = Matrix()
+
     companion object {
         private val ASTEROID_DRAWABLES = listOf(
             R.drawable.asteorid1big,
-            R.drawable.asteroid1medium,
-            R.drawable.asteorid2medium,
-            R.drawable.asteroid2small
+            R.drawable.asteroid2small,
+            R.drawable.asteorid2medium
         )
     }
 
@@ -46,8 +48,7 @@ class Asteroid(context: Context, private val screenWidth: Int, screenHeight: Int
         x = Random.nextInt(0, screenWidth - width).toFloat()
         y = -height.toFloat()
 
-        // --- AJUSTE: Reducir la velocidad de los asteroides ---
-        speed = Random.nextInt(60, 180).toFloat() // Era 100-400
+        speed = Random.nextInt(60, 180).toFloat()
         rotationSpeed = Random.nextInt(-25, 25).toFloat()
 
         collisionRect = Rect(x.toInt(), y.toInt(), x.toInt() + width, y.toInt() + height)
@@ -68,10 +69,10 @@ class Asteroid(context: Context, private val screenWidth: Int, screenHeight: Int
     fun draw(canvas: Canvas) {
         if (!isAlive) return
 
-        val matrix = Matrix().apply {
-            postRotate(currentRotation, (width / 2).toFloat(), (height / 2).toFloat())
-            postTranslate(x, y)
-        }
+        // --- OPTIMIZACIÓN: Resetear y reutilizar la Matrix en lugar de crear una nueva ---
+        matrix.reset()
+        matrix.postRotate(currentRotation, (width / 2).toFloat(), (height / 2).toFloat())
+        matrix.postTranslate(x, y)
         canvas.drawBitmap(bitmap, matrix, null)
     }
 

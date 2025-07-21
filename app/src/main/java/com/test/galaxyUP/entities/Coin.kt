@@ -39,7 +39,7 @@ class Coin(
         collisionRect = Rect(x.toInt(), y.toInt(), x.toInt() + width, y.toInt() + height)
     }
 
-    fun update() {
+    fun update(deltaTime: Float) {
         y += speed
         collisionRect.set(x.toInt(), y.toInt(), x.toInt() + width, y.toInt() + height)
     }

@@ -19,9 +19,9 @@ class Enemy(context: Context, private val screenWidth: Int, screenHeight: Int) {
 
     private val speedY: Float
 
-    private val initialX: Float
-    private val amplitude: Float
-    private val frequency: Float
+    private var initialX: Float
+    private var amplitude: Float
+    private var frequency: Float
     private var time: Float = 0f
 
     var canShoot = false
@@ -77,4 +77,20 @@ class Enemy(context: Context, private val screenWidth: Int, screenHeight: Int) {
     fun resetShootFlag() {
         canShoot = false
     }
+
+    fun reset(screenWidth: Int, screenHeight: Int) {
+        x = Random.nextInt(0, screenWidth - width).toFloat()
+        y = -height.toFloat()
+        initialX = x
+        amplitude = Random.nextInt(50, screenWidth / 4).toFloat()
+        frequency = Random.nextFloat() * 2f + 1f
+        time = 0f
+        shootTimer = 0L
+        canShoot = false
+        collisionRect.left = x.toInt()
+        collisionRect.top = y.toInt()
+        collisionRect.right = x.toInt() + width
+        collisionRect.bottom = y.toInt() + height
+    }
 }
+
