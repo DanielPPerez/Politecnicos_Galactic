@@ -14,7 +14,7 @@ class ShopView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
-) : FrameLayout(context, attrs, defStyleAttr) {
+) : RelativeLayout(context, attrs, defStyleAttr) {
 
     private val skinDrawables = listOf(
         R.drawable.ship1blue, // Skin inicial
@@ -40,62 +40,141 @@ class ShopView @JvmOverloads constructor(
     private val rightButton: ImageButton
     private val buyButton: Button
     private val coinsTextView: TextView
+    private val welcomeTextView: TextView
 
     init {
+        id = View.generateViewId()
+        // Este fondo semi-transparente permite ver un poco el fondo de la actividad principal
         setBackgroundColor(Color.parseColor("#99000000"))
 
-        skinImageView = ImageView(context).apply {
-            layoutParams = LayoutParams(350, 350, Gravity.CENTER)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+        // Contenedor principal para centrar el bloque de elementos.
+        val mainContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = LayoutParams(
+                LayoutParams.MATCH_PARENT,
+                LayoutParams.WRAP_CONTENT
+            ).apply {
+                addRule(CENTER_IN_PARENT)
+                // Empuja todo el bloque de la tienda hacia abajo
+                topMargin = 100.dpToPx()
+            }
         }
+
+        // TextView de bienvenida
+        welcomeTextView = TextView(context).apply {
+            textSize = 28f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER_HORIZONTAL // Centra el texto en su propio espacio
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, // Ocupa todo el ancho para centrar
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        // Contenedor horizontal para los botones y la skin
+        val skinRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                // Un margen superior grande para separar la tienda del saludo
+                topMargin = 40.dpToPx() // Ajustado a un valor más razonable que 480
+            }
+        }
+
+        // Botón izquierdo
         leftButton = ImageButton(context).apply {
             setImageResource(R.drawable.ic_arrow_left)
             background = null
             setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_ATOP)
             alpha = 0.7f
-            layoutParams = LayoutParams(120, 120, Gravity.START or Gravity.CENTER_VERTICAL)
+            scaleType = ImageView.ScaleType.FIT_XY
+            layoutParams = LinearLayout.LayoutParams(120.dpToPx(), 120.dpToPx()).apply {
+                marginEnd = 22.dpToPx()
+            }
         }
+
+        // Imagen de la skin
+        skinImageView = ImageView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(160.dpToPx(), 160.dpToPx()).apply {
+                marginStart = 16.dpToPx()
+                marginEnd = 16.dpToPx()
+            }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+
+        // Botón derecho
         rightButton = ImageButton(context).apply {
             setImageResource(R.drawable.ic_arrow_right)
             background = null
             setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_ATOP)
             alpha = 0.7f
-            layoutParams = LayoutParams(120, 120, Gravity.END or Gravity.CENTER_VERTICAL)
-        }
-        buyButton = Button(context).apply {
-            textSize = 18f
-            setTextColor(Color.WHITE)
-            setBackgroundColor(ContextCompat.getColor(context, R.color.purple_500))
-            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-                bottomMargin = 30
+            scaleType = ImageView.ScaleType.FIT_XY
+            layoutParams = LinearLayout.LayoutParams(120.dpToPx(), 120.dpToPx()).apply {
+                marginStart = 22.dpToPx()
             }
         }
-        coinsTextView = TextView(context).apply {
-            textSize = 24f
-            setTextColor(Color.YELLOW)
-            setPadding(20, 20, 20, 20)
-            gravity = Gravity.CENTER
-            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+
+        skinRow.addView(leftButton)
+        skinRow.addView(skinImageView)
+        skinRow.addView(rightButton)
+
+        // Botón de seleccionar/comprar
+        buyButton = Button(context).apply {
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            setPadding(40.dpToPx(), 0, 40.dpToPx(), 0)
+            setBackgroundColor(ContextCompat.getColor(context, R.color.purple_500))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                52.dpToPx()
+            ).apply {
+                topMargin = 50.dpToPx()
+            }
         }
 
-        addView(skinImageView)
-        addView(leftButton)
-        addView(rightButton)
-        addView(buyButton)
+        // TextView de monedas (posicionado en la esquina superior derecha del RelativeLayout)
+        coinsTextView = TextView(context).apply {
+            textSize = 20f
+            setTextColor(Color.YELLOW)
+            layoutParams = LayoutParams(
+                LayoutParams.WRAP_CONTENT,
+                LayoutParams.WRAP_CONTENT
+            ).apply {
+                addRule(ALIGN_PARENT_TOP)
+                addRule(ALIGN_PARENT_END)
+                topMargin = 32.dpToPx()
+                rightMargin = 32.dpToPx()
+            }
+        }
+
+        // <-- CORREGIDO: Añadir el saludo ANTES que los otros elementos de la tienda.
+        mainContainer.addView(welcomeTextView)
+        mainContainer.addView(skinRow)
+        mainContainer.addView(buyButton)
+
+        // Finalmente, añadimos el contenedor principal y el texto de monedas al RelativeLayout
+        addView(mainContainer)
         addView(coinsTextView)
 
+        // Listeners (sin cambios)
         leftButton.setOnClickListener {
             if (selectedIndex > 0) {
                 selectedIndex--
                 updateShopUI()
             }
         }
+
         rightButton.setOnClickListener {
             if (selectedIndex < skinDrawables.size - 1) {
                 selectedIndex++
                 updateShopUI()
             }
         }
+
         buyButton.setOnClickListener {
             val skinRes = skinDrawables[selectedIndex]
             if (ownedSkins.contains(skinRes)) {
@@ -114,17 +193,27 @@ class ShopView @JvmOverloads constructor(
                 }
             }
         }
+
         updateShopUI()
     }
 
     private fun getCostForSkin(index: Int): Int {
-        if (index == 0) return 0
-        return 50 + 50 * (index - 1)
+        return when {
+            index == 0 -> 0
+            index <= 4 -> 50
+            index <= 8 -> 100
+            else -> 150
+        }
     }
 
     fun setCoins(value: Int) {
         coins = value
-        updateShopUI()
+        coinsTextView.text = "Monedas: $coins"
+    }
+
+    // Esta función ahora actualiza el `welcomeTextView` que sí es visible.
+    fun setPlayerName(name: String) {
+        welcomeTextView.text = "¡Bienvenido $name!"
     }
 
     fun setOwnedSkins(skins: Set<Int>) {
@@ -153,6 +242,7 @@ class ShopView @JvmOverloads constructor(
 
     private fun updateShopUI() {
         if (selectedIndex >= skinDrawables.size) return
+
         val skinRes = skinDrawables[selectedIndex]
         skinImageView.setImageResource(skinRes)
         coinsTextView.text = "Monedas: $coins"
@@ -164,8 +254,10 @@ class ShopView @JvmOverloads constructor(
         rightButton.visibility = if (selectedIndex == skinDrawables.size - 1) View.INVISIBLE else View.VISIBLE
     }
 
-    // --- MÉTODOS AÑADIDOS PARA SOLUCIONAR EL ERROR ---
+    // Métodos de ayuda
     fun getOwnedSkins(): Set<Int> = ownedSkins
     fun getCoins(): Int = coins
     fun getSelectedSkinRes(): Int = skinDrawables[selectedIndex]
+
+    private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
 }

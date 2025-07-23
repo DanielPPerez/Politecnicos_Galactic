@@ -76,46 +76,45 @@ class HUD(context: Context, private val screenWidth: Int, screenHeight: Int) {
     // --- CORREGIDO: Añadido el parámetro coinsCollected ---
     fun draw(canvas: Canvas, score: Int, lives: Int, time: Float, coinsCollected: Int) {
         // Posiciones de Anclaje
-        val scoreBarX = margin
-        val scoreBarY = margin
+        val baseX = margin
+        var currentY = margin
 
-        // 1. Dibujar barra de score
-        canvas.drawBitmap(scoreBarBitmap, scoreBarX, scoreBarY, null)
-
-        // 2. Dibujar corazones SOBRE la barra
-        val heartsY = scoreBarY + (scoreBarHeight - heartHeight) / 2f
-        var currentHeartX = scoreBarX + scoreBarBitmap.width * 0.45f
+        // 1. Dibujar corazones (arriba a la izquierda)
+        var currentHeartX = baseX
         for (i in 0 until MAX_LIVES) {
             val heartBitmap = if (i < lives) heartFullBitmap else heartEmptyBitmap
-            canvas.drawBitmap(heartBitmap, currentHeartX, heartsY, null)
+            canvas.drawBitmap(heartBitmap, currentHeartX, currentY, null)
             currentHeartX += heartWidth + 10
         }
+        currentY += heartHeight + 15f
 
-        // 3. Dibujar el puntaje AL LADO de la barra
+        // 2. Dibujar barra de score debajo de corazones
+        canvas.drawBitmap(scoreBarBitmap, baseX, currentY, null)
+
+        // 3. Dibujar el puntaje centrado en la barra
         val scoreString = score.toString().padStart(6, '0')
-        val scoreX = scoreBarX + scoreBarBitmap.width + 20f
-        val scoreY = scoreBarY + scoreBarHeight / 2f - (scorePaint.descent() + scorePaint.ascent()) / 2f
+        val scoreX = baseX + scoreBarBitmap.width / 2f - scorePaint.measureText(scoreString) / 2f
+        val scoreY = currentY + scoreBarHeight / 2f - (scorePaint.descent() + scorePaint.ascent()) / 2f
         canvas.drawText(scoreString, scoreX, scoreY, scorePaint)
+        currentY += scoreBarHeight + 15f
 
-        // 4. Dibujar el tiempo (esquina superior derecha)
-        val timeString = formatTime(time)
-        val timeStringWidth = timePaint.measureText(timeString)
-        val timeX = screenWidth - margin - timeStringWidth
-        val clockY = margin + (timePaint.textSize - clockBitmap.height) / 2f
-        val clockX = timeX - clockBitmap.width - 15f
-        val timeY = clockY + clockBitmap.height / 2f - (timePaint.descent() + timePaint.ascent()) / 2f
-        canvas.drawBitmap(clockBitmap, clockX, clockY, null)
-        canvas.drawText(timeString, timeX, timeY, timePaint)
-
-        // 5. --- NUEVO: Dibujar el contador de monedas ---
-        // Lo dibujaremos debajo del score
-        val coinIconX = scoreBarX
-        val coinIconY = scoreBarY + scoreBarHeight + 20f
+        // 4. Dibujar el contador de monedas debajo del score
+        val coinIconX = baseX
+        val coinIconY = currentY
         canvas.drawBitmap(coinIconBitmap, coinIconX, coinIconY, null)
-
         val coinText = "x $coinsCollected"
         val coinTextY = coinIconY + coinIconBitmap.height / 2f - (coinPaint.descent() + coinPaint.ascent()) / 2f
         canvas.drawText(coinText, coinIconX + coinIconBitmap.width + 10f, coinTextY, coinPaint)
+
+        // 5. Dibujar el tiempo (esquina superior derecha, alineado horizontalmente)
+        val timeString = formatTime(time)
+        val timeStringWidth = timePaint.measureText(timeString)
+        val timeX = screenWidth - margin - timeStringWidth
+        val clockX = timeX - clockBitmap.width - 15f
+        val clockY = margin + (timePaint.textSize - clockBitmap.height) / 2f
+        val timeY = clockY + clockBitmap.height / 2f - (timePaint.descent() + timePaint.ascent()) / 2f
+        canvas.drawBitmap(clockBitmap, clockX, clockY, null)
+        canvas.drawText(timeString, timeX, timeY, timePaint)
     }
 
     private fun formatTime(time: Float): String {

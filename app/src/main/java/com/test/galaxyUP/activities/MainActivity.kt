@@ -1,5 +1,6 @@
 package com.test.galaxyUP.activities
 
+import android.app.Activity
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -9,11 +10,12 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.Group
 import com.test.galaxyUP.R
-import com.test.galaxyUP.ui.ShopView
 import com.test.galaxyUP.core.SoundManager
+import com.test.galaxyUP.ui.ShopView
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,6 +33,22 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var sharedPreferences: SharedPreferences
 
+    // Lanza el juego y espera a que termine para recibir las monedas.
+    private val gameLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val coinsFromGame = result.data?.getIntExtra("coins_collected", 0) ?: 0
+            if (coinsFromGame > 0) {
+                val currentCoins = sharedPreferences.getInt("coins", 0)
+                val newTotalCoins = currentCoins + coinsFromGame
+
+                // Guarda el nuevo total y actualiza la ShopView.
+                sharedPreferences.edit().putInt("coins", newTotalCoins).apply()
+                shopView.setCoins(newTotalCoins)
+                Toast.makeText(this, "¡Has ganado $coinsFromGame monedas!", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
@@ -42,6 +60,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         sharedPreferences = getSharedPreferences("user_data", MODE_PRIVATE)
+        if (!sharedPreferences.contains("coins")) {
+            sharedPreferences.edit().putInt("coins", 100).apply()
+        }
+
         bindViews()
         setupShop()
         checkLoginStatus()
@@ -90,17 +112,15 @@ class MainActivity : AppCompatActivity() {
         loginButton.setOnClickListener { handleLogin() }
 
         playButton.setOnClickListener {
-            // --- MODIFICADO: Detener la música del menú antes de empezar el juego ---
             SoundManager.stopMusic()
-
             val intent = Intent(this, GameActivity::class.java).apply {
                 val selectedSkin = sharedPreferences.getInt("selected_skin", R.drawable.ship1blue)
                 putExtra("selected_skin_res", selectedSkin)
             }
-            startActivity(intent) // No necesitamos 'gameLauncher' si GameActivity maneja sus reinicios
+            // Usa el launcher para iniciar el juego esperando un resultado.
+            gameLauncher.launch(intent)
         }
     }
-
 
     private fun showLoginScreen() {
         titleTextView.visibility = View.GONE
@@ -122,8 +142,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun showWelcomeScreen(userName: String) {
         authGroup.visibility = View.GONE
-        titleTextView.text = "¡Bienvenido $userName!"
-        titleTextView.visibility = View.VISIBLE
+
+        // <-- CORREGIDO: Le pasa el nombre a la ShopView para que ella lo muestre.
+        shopView.setPlayerName(userName)
+
+        // El TextView de MainActivity ya no es necesario, se oculta.
+        titleTextView.visibility = View.GONE
+
         playButton.visibility = View.VISIBLE
         shopView.visibility = View.VISIBLE
         loadShopData()
@@ -165,11 +190,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadShopData() {
         val coins = sharedPreferences.getInt("coins", 100)
+        shopView.setCoins(coins)
         val selectedSkin = sharedPreferences.getInt("selected_skin", R.drawable.ship1blue)
         val ownedSkinsStr = sharedPreferences.getStringSet("owned_skins", setOf())
         val ownedSkinsInt = ownedSkinsStr?.mapNotNull { it.toIntOrNull() }?.toSet() ?: setOf()
-
-        shopView.setCoins(coins)
         shopView.setOwnedSkins(ownedSkinsInt)
         shopView.setSelectedSkin(selectedSkin)
     }
@@ -183,12 +207,9 @@ class MainActivity : AppCompatActivity() {
             .apply()
     }
 
-    // --- NUEVO: Manejo del ciclo de vida para la música ---
     override fun onResume() {
         super.onResume()
-        // Cuando la actividad vuelve a estar visible, reanuda o inicia la música del menú.
         SoundManager.playMenuMusic(this)
-        // También actualizamos la tienda por si volvemos del juego
         if (shopView.visibility == View.VISIBLE) {
             loadShopData()
         }
@@ -196,13 +217,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // Pausamos la música si la app se va a segundo plano
         SoundManager.pauseMusic()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Liberamos todos los recursos de música cuando la app se cierra por completo
         SoundManager.release()
     }
 }

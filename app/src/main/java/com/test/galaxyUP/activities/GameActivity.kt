@@ -1,18 +1,18 @@
 package com.test.galaxyUP.activities
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import com.test.galaxyUP.game.GameView
 import com.test.galaxyUP.R
-import android.content.SharedPreferences
-import com.test.galaxyUP.core.SoundManager // --- NUEVA IMPORTACIÓN ---
+import com.test.galaxyUP.core.SoundManager
+import com.test.galaxyUP.game.GameView
 
 class GameActivity : AppCompatActivity() {
 
     private lateinit var gameView: GameView
-    private lateinit var sharedPreferences: SharedPreferences
-    private var selectedSkinRes: Int = R.drawable.ship1blue
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,44 +23,54 @@ class GameActivity : AppCompatActivity() {
                 or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 or View.SYSTEM_UI_FLAG_FULLSCREEN)
 
-        sharedPreferences = getSharedPreferences("user_data", MODE_PRIVATE)
-        selectedSkinRes = intent.getIntExtra("selected_skin_res", R.drawable.ship1blue)
-
+        val selectedSkinRes = intent.getIntExtra("selected_skin_res", R.drawable.ship1blue)
         gameView = GameView(this, selectedSkinRes)
         setContentView(gameView)
 
-        gameView.gameOverAction = { action ->
-            val coins = gameView.getCoinsCollected()
-            saveCoins(coins)
+        // Acción centralizada para volver al menú y devolver un resultado.
+        val returnToMenuAction = {
+            val coinsCollected = gameView.getCoinsCollected()
+            val resultIntent = Intent().apply {
+                putExtra("coins_collected", coinsCollected)
+            }
+            setResult(Activity.RESULT_OK, resultIntent)
+            SoundManager.stopMusic()
+            finish()
+        }
 
-            if (action == 0) {
+        // Configuración para el menú de Game Over
+        gameView.gameOverAction = { action ->
+            if (action == 0) { // Volver a Jugar
                 gameView.setupGame()
-            } else if (action == 1) {
-                // --- MODIFICADO: Detener la música del juego antes de volver al menú ---
-                SoundManager.stopMusic()
-                finish()
+            } else if (action == 1) { // Volver al Menú
+                returnToMenuAction()
             }
         }
-    }
 
-    private fun saveCoins(coins: Int) {
-        if (coins > 0) {
-            val prevCoins = sharedPreferences.getInt("coins", 0)
-            sharedPreferences.edit().putInt("coins", prevCoins + coins).apply()
+        // Configuración para el menú de Pausa
+        gameView.pauseAction = { actionIndex ->
+            if (actionIndex == 1) { // Volver al Menú
+                returnToMenuAction()
+            }
         }
+
+        // Manejar la pulsación del botón "Atrás" del sistema.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Ejecuta la misma lógica que si se usara el menú para salir.
+                returnToMenuAction()
+            }
+        })
     }
 
-    // --- NUEVO: Manejo del ciclo de vida para la música ---
     override fun onResume() {
         super.onResume()
-        // Inicia o reanuda la música del juego
         SoundManager.playGameMusic(this)
         gameView.resume()
     }
 
     override fun onPause() {
         super.onPause()
-        // Pausa la música y el juego
         SoundManager.pauseMusic()
         gameView.pause()
     }
