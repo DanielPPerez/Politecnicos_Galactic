@@ -14,13 +14,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.Group
 import com.test.galaxyUP.R
+import com.test.galaxyUP.core.ScoreManager
 import com.test.galaxyUP.core.SoundManager
+import com.test.galaxyUP.entities.ScoreEntry
 import com.test.galaxyUP.ui.ShopView
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var titleTextView: TextView
     private lateinit var playButton: Button
+    private lateinit var highscoreButton: Button // <-- AÑADIDO
     private lateinit var authGroup: Group
     private lateinit var nameEditText: EditText
     private lateinit var emailEditText: EditText
@@ -33,30 +36,35 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var sharedPreferences: SharedPreferences
 
-    // Lanza el juego y espera a que termine para recibir las monedas.
+    // Lanza el juego y espera a que termine para recibir monedas y puntaje.
     private val gameLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val coinsFromGame = result.data?.getIntExtra("coins_collected", 0) ?: 0
+            val data = result.data
+
+            // Procesar monedas
+            val coinsFromGame = data?.getIntExtra("coins_collected", 0) ?: 0
             if (coinsFromGame > 0) {
                 val currentCoins = sharedPreferences.getInt("coins", 0)
                 val newTotalCoins = currentCoins + coinsFromGame
-
-                // Guarda el nuevo total y actualiza la ShopView.
                 sharedPreferences.edit().putInt("coins", newTotalCoins).apply()
                 shopView.setCoins(newTotalCoins)
                 Toast.makeText(this, "¡Has ganado $coinsFromGame monedas!", Toast.LENGTH_SHORT).show()
+            }
+
+            // <-- CORREGIDO: Procesar y guardar el puntaje
+            val scoreFromGame = data?.getIntExtra("player_score", 0) ?: 0
+            if (scoreFromGame > 0) {
+                val userEmail = sharedPreferences.getString("logged_in_user", "default_user")!!
+                val userName = sharedPreferences.getString("name_for_$userEmail", "Jugador") ?: "Jugador"
+                val scoreEntry = ScoreEntry(playerName = userName, score = scoreFromGame)
+                ScoreManager.saveScore(this, scoreEntry)
+                Toast.makeText(this, "Puntaje final: $scoreFromGame", Toast.LENGTH_LONG).show()
             }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_FULLSCREEN)
         setContentView(R.layout.activity_main)
 
         sharedPreferences = getSharedPreferences("user_data", MODE_PRIVATE)
@@ -73,6 +81,7 @@ class MainActivity : AppCompatActivity() {
     private fun bindViews() {
         titleTextView = findViewById(R.id.titleTextView)
         playButton = findViewById(R.id.playButton)
+        highscoreButton = findViewById(R.id.highscoreButton) // <-- AÑADIDO
         authGroup = findViewById(R.id.authGroup)
         nameEditText = findViewById(R.id.nameEditText)
         emailEditText = findViewById(R.id.emailEditText)
@@ -112,20 +121,24 @@ class MainActivity : AppCompatActivity() {
         loginButton.setOnClickListener { handleLogin() }
 
         playButton.setOnClickListener {
-            SoundManager.stopMusic()
             val intent = Intent(this, GameActivity::class.java).apply {
-                val selectedSkin = sharedPreferences.getInt("selected_skin", R.drawable.ship1blue)
-                putExtra("selected_skin_res", selectedSkin)
+                putExtra("selected_skin_res", sharedPreferences.getInt("selected_skin", R.drawable.ship1blue))
             }
-            // Usa el launcher para iniciar el juego esperando un resultado.
             gameLauncher.launch(intent)
+        }
+
+        // <-- CORREGIDO: Listener para el botón de puntajes
+        highscoreButton.setOnClickListener {
+            val intent = Intent(this, HighscoreActivity::class.java)
+            startActivity(intent)
         }
     }
 
     private fun showLoginScreen() {
         titleTextView.visibility = View.GONE
         playButton.visibility = View.GONE
-        shopView.visibility = View.GONE
+        highscoreButton.visibility = View.GONE // <-- AÑADIDO
+        shopContainer.visibility = View.GONE
         authGroup.visibility = View.VISIBLE
         nameEditText.visibility = View.GONE
         confirmRegisterButton.visibility = View.GONE
@@ -142,14 +155,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun showWelcomeScreen(userName: String) {
         authGroup.visibility = View.GONE
-
-        // <-- CORREGIDO: Le pasa el nombre a la ShopView para que ella lo muestre.
-        shopView.setPlayerName(userName)
-
-        // El TextView de MainActivity ya no es necesario, se oculta.
-        titleTextView.visibility = View.GONE
-
+        titleTextView.text = "¡Bienvenido $userName!"
+        titleTextView.visibility = View.VISIBLE
         playButton.visibility = View.VISIBLE
+        highscoreButton.visibility = View.VISIBLE // <-- AÑADIDO
+        shopContainer.visibility = View.VISIBLE
         shopView.visibility = View.VISIBLE
         loadShopData()
     }
@@ -162,10 +172,11 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Por favor, rellena todos los campos", Toast.LENGTH_SHORT).show()
             return
         }
-        val editor = sharedPreferences.edit()
-        editor.putString("name_for_$email", name)
-        editor.putString("password_for_$email", password)
-        editor.apply()
+        sharedPreferences.edit().apply {
+            putString("name_for_$email", name)
+            putString("password_for_$email", password)
+            apply()
+        }
         Toast.makeText(this, "Registro exitoso", Toast.LENGTH_SHORT).show()
         showLoginScreen()
     }
@@ -189,28 +200,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadShopData() {
-        val coins = sharedPreferences.getInt("coins", 100)
-        shopView.setCoins(coins)
-        val selectedSkin = sharedPreferences.getInt("selected_skin", R.drawable.ship1blue)
+        shopView.setCoins(sharedPreferences.getInt("coins", 100))
         val ownedSkinsStr = sharedPreferences.getStringSet("owned_skins", setOf())
-        val ownedSkinsInt = ownedSkinsStr?.mapNotNull { it.toIntOrNull() }?.toSet() ?: setOf()
-        shopView.setOwnedSkins(ownedSkinsInt)
-        shopView.setSelectedSkin(selectedSkin)
+        shopView.setOwnedSkins(ownedSkinsStr?.mapNotNull { it.toIntOrNull() }?.toSet() ?: setOf())
+        shopView.setSelectedSkin(sharedPreferences.getInt("selected_skin", R.drawable.ship1blue))
     }
 
     private fun saveOwnedSkinsAndCoins() {
-        val ownedSkinsStr = shopView.getOwnedSkins().map { it.toString() }.toSet()
-        val coins = shopView.getCoins()
-        sharedPreferences.edit()
-            .putStringSet("owned_skins", ownedSkinsStr)
-            .putInt("coins", coins)
-            .apply()
+        sharedPreferences.edit().apply {
+            putStringSet("owned_skins", shopView.getOwnedSkins().map { it.toString() }.toSet())
+            putInt("coins", shopView.getCoins())
+            apply()
+        }
     }
 
     override fun onResume() {
         super.onResume()
         SoundManager.playMenuMusic(this)
-        if (shopView.visibility == View.VISIBLE) {
+        if (shopContainer.visibility == View.VISIBLE) {
             loadShopData()
         }
     }

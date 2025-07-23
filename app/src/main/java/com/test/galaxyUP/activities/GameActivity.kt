@@ -27,11 +27,13 @@ class GameActivity : AppCompatActivity() {
         gameView = GameView(this, selectedSkinRes)
         setContentView(gameView)
 
-        // Acción centralizada para volver al menú y devolver un resultado.
         val returnToMenuAction = {
             val coinsCollected = gameView.getCoinsCollected()
+            val finalScore = gameView.getScore() // <-- OBTENER PUNTAJE
+
             val resultIntent = Intent().apply {
                 putExtra("coins_collected", coinsCollected)
+                putExtra("player_score", finalScore) // <-- AÑADIR PUNTAJE AL RESULTADO
             }
             setResult(Activity.RESULT_OK, resultIntent)
             SoundManager.stopMusic()

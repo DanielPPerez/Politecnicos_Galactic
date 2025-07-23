@@ -376,6 +376,7 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
     }
 
     fun getCoinsCollected(): Int = coinsCollected
+    fun getScore(): Int = score
 
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
