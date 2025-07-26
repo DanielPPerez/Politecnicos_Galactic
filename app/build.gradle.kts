@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -32,38 +31,47 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_1_8 // Cambiado a 1.8 para máxima compatibilidad
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
     kotlinOptions {
-        jvmTarget = "11"
-    }
-    buildFeatures {
-        compose = true
+        jvmTarget = "1.8"
     }
 }
 
 dependencies {
 
+    // ---------- DEPENDENCIAS BÁSICAS Y DE UI (XML) ----------
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
     implementation(libs.androidx.appcompat)
-    implementation(libs.firebase.annotations)
+    implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.recyclerview)
+
+    // ---------- DEPENDENCIAS DE RED Y TAREAS ASÍNCRONAS ----------
+    // Retrofit (para hacer las llamadas a la API)
+    implementation(libs.retrofit)
+    // Gson Converter (para convertir JSON a objetos Kotlin)
+    implementation(libs.converter.gson)
+    // Logging Interceptor (para ver las llamadas de red en Logcat)
+    implementation(libs.logging.interceptor)
+    // Coroutines (para manejar las llamadas de red en segundo plano)
+    implementation(libs.coroutines.core)
+    implementation(libs.coroutines.android)
+    // Lifecycle (necesario para lifecycleScope)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+
+
+    // ---------- DEPENDENCIAS DE TEST ----------
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
-    debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
-    implementation ("com.google.code.gson:gson:2.9.0")
 
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+
+    // Las siguientes dependencias son de Compose y Firebase, se mantienen por si las usas en otro lado,
+    // pero no son estrictamente necesarias para la lógica actual.
+    // implementation(libs.androidx.activity.compose)
+    // implementation(platform(libs.androidx.compose.bom))
+    // implementation(libs.androidx.ui)
+    // ... etc ...
+    // implementation(libs.firebase.annotations)
 }

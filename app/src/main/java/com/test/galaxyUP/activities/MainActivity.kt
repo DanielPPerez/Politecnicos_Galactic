@@ -1,6 +1,5 @@
 package com.test.galaxyUP.activities
 
-import android.app.Activity
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -10,20 +9,21 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.Group
+import androidx.lifecycle.lifecycleScope
 import com.test.galaxyUP.R
-import com.test.galaxyUP.core.ScoreManager
+import com.test.galaxyUP.api.*
 import com.test.galaxyUP.core.SoundManager
-import com.test.galaxyUP.entities.ScoreEntry
 import com.test.galaxyUP.ui.ShopView
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
+    // --- Declaración de Vistas ---
     private lateinit var titleTextView: TextView
     private lateinit var playButton: Button
-    private lateinit var highscoreButton: Button // <-- AÑADIDO
+    private lateinit var highscoreButton: Button
     private lateinit var authGroup: Group
     private lateinit var nameEditText: EditText
     private lateinit var emailEditText: EditText
@@ -36,52 +36,30 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var sharedPreferences: SharedPreferences
 
-    // Lanza el juego y espera a que termine para recibir monedas y puntaje.
-    private val gameLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data
-
-            // Procesar monedas
-            val coinsFromGame = data?.getIntExtra("coins_collected", 0) ?: 0
-            if (coinsFromGame > 0) {
-                val currentCoins = sharedPreferences.getInt("coins", 0)
-                val newTotalCoins = currentCoins + coinsFromGame
-                sharedPreferences.edit().putInt("coins", newTotalCoins).apply()
-                shopView.setCoins(newTotalCoins)
-                Toast.makeText(this, "¡Has ganado $coinsFromGame monedas!", Toast.LENGTH_SHORT).show()
-            }
-
-            // <-- CORREGIDO: Procesar y guardar el puntaje
-            val scoreFromGame = data?.getIntExtra("player_score", 0) ?: 0
-            if (scoreFromGame > 0) {
-                val userEmail = sharedPreferences.getString("logged_in_user", "default_user")!!
-                val userName = sharedPreferences.getString("name_for_$userEmail", "Jugador") ?: "Jugador"
-                val scoreEntry = ScoreEntry(playerName = userName, score = scoreFromGame)
-                ScoreManager.saveScore(this, scoreEntry)
-                Toast.makeText(this, "Puntaje final: $scoreFromGame", Toast.LENGTH_LONG).show()
-            }
+    // Propiedad para acceder al token de autenticación
+    private var authToken: String?
+        get() = sharedPreferences.getString("auth_token", null)
+        set(value) {
+            sharedPreferences.edit().putString("auth_token", value).apply()
         }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         sharedPreferences = getSharedPreferences("user_data", MODE_PRIVATE)
-        if (!sharedPreferences.contains("coins")) {
-            sharedPreferences.edit().putInt("coins", 100).apply()
-        }
 
+        // Orden de inicialización correcto para evitar crashes
         bindViews()
+        setupClickListeners()
         setupShop()
         checkLoginStatus()
-        setupClickListeners()
     }
 
     private fun bindViews() {
         titleTextView = findViewById(R.id.titleTextView)
         playButton = findViewById(R.id.playButton)
-        highscoreButton = findViewById(R.id.highscoreButton) // <-- AÑADIDO
+        highscoreButton = findViewById(R.id.highscoreButton)
         authGroup = findViewById(R.id.authGroup)
         nameEditText = findViewById(R.id.nameEditText)
         emailEditText = findViewById(R.id.emailEditText)
@@ -92,52 +70,45 @@ class MainActivity : AppCompatActivity() {
         shopContainer = findViewById(R.id.shopContainer)
     }
 
-    private fun setupShop() {
-        shopView = ShopView(this)
-        shopContainer.addView(shopView)
-        shopView.visibility = View.GONE
-
-        shopView.setOnSkinSelectedListener { skinRes ->
-            sharedPreferences.edit().putInt("selected_skin", skinRes).apply()
-        }
-        shopView.setOnBuySkinListener { cost, newCoinTotal ->
-            saveOwnedSkinsAndCoins()
-        }
-    }
-
-    private fun checkLoginStatus() {
-        val loggedInUserEmail = sharedPreferences.getString("logged_in_user", null)
-        if (loggedInUserEmail != null) {
-            val userName = sharedPreferences.getString("name_for_$loggedInUserEmail", "Jugador")
-            showWelcomeScreen(userName ?: "Jugador")
-        } else {
-            showLoginScreen()
-        }
-    }
-
     private fun setupClickListeners() {
         registerButton.setOnClickListener { showRegistrationScreen() }
         confirmRegisterButton.setOnClickListener { handleRegistration() }
         loginButton.setOnClickListener { handleLogin() }
-
         playButton.setOnClickListener {
             val intent = Intent(this, GameActivity::class.java).apply {
                 putExtra("selected_skin_res", sharedPreferences.getInt("selected_skin", R.drawable.ship1blue))
             }
-            gameLauncher.launch(intent)
-        }
-
-        // <-- CORREGIDO: Listener para el botón de puntajes
-        highscoreButton.setOnClickListener {
-            val intent = Intent(this, HighscoreActivity::class.java)
             startActivity(intent)
+        }
+        highscoreButton.setOnClickListener {
+            startActivity(Intent(this, HighscoreActivity::class.java))
+        }
+    }
+
+    private fun setupShop() {
+        shopView = ShopView(this)
+        shopContainer.addView(shopView)
+        shopView.visibility = View.GONE
+        shopView.setOnSkinSelectedListener { skinRes ->
+            sharedPreferences.edit().putInt("selected_skin", skinRes).apply()
+        }
+        shopView.setOnBuySkinListener { cost, _ ->
+            performPurchase(cost)
+        }
+    }
+
+    private fun checkLoginStatus() {
+        if (authToken != null) {
+            fetchUserProfile()
+        } else {
+            showLoginScreen()
         }
     }
 
     private fun showLoginScreen() {
         titleTextView.visibility = View.GONE
         playButton.visibility = View.GONE
-        highscoreButton.visibility = View.GONE // <-- AÑADIDO
+        highscoreButton.visibility = View.GONE
         shopContainer.visibility = View.GONE
         authGroup.visibility = View.VISIBLE
         nameEditText.visibility = View.GONE
@@ -153,15 +124,16 @@ class MainActivity : AppCompatActivity() {
         confirmRegisterButton.visibility = View.VISIBLE
     }
 
-    private fun showWelcomeScreen(userName: String) {
+    private fun showWelcomeScreen(userName: String, coins: Int) {
         authGroup.visibility = View.GONE
         titleTextView.text = "¡Bienvenido $userName!"
         titleTextView.visibility = View.VISIBLE
         playButton.visibility = View.VISIBLE
-        highscoreButton.visibility = View.VISIBLE // <-- AÑADIDO
+        highscoreButton.visibility = View.VISIBLE
         shopContainer.visibility = View.VISIBLE
         shopView.visibility = View.VISIBLE
-        loadShopData()
+        shopView.setCoins(coins)
+        loadLocalShopData()
     }
 
     private fun handleRegistration() {
@@ -172,44 +144,114 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Por favor, rellena todos los campos", Toast.LENGTH_SHORT).show()
             return
         }
-        sharedPreferences.edit().apply {
-            putString("name_for_$email", name)
-            putString("password_for_$email", password)
-            apply()
+
+        lifecycleScope.launch {
+            try {
+                val request = RegisterRequest(username = name, email = email, password = password)
+                val response = ApiClient.instance.register(request)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    Toast.makeText(this@MainActivity, "¡Registro exitoso! Por favor, inicia sesión.", Toast.LENGTH_LONG).show()
+                    showLoginScreen()
+                } else {
+                    val errorMsg = response.body()?.message ?: "Error desconocido en el registro."
+                    Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Error de red: ${e.message}", Toast.LENGTH_LONG).show()
+            }
         }
-        Toast.makeText(this, "Registro exitoso", Toast.LENGTH_SHORT).show()
-        showLoginScreen()
     }
 
     private fun handleLogin() {
         val email = emailEditText.text.toString().trim()
         val password = passwordEditText.text.toString().trim()
         if (email.isEmpty() || password.isEmpty()) {
-            Toast.makeText(this, "Por favor, introduce email y contraseña", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Introduce email y contraseña", Toast.LENGTH_SHORT).show()
             return
         }
-        val savedPassword = sharedPreferences.getString("password_for_$email", null)
-        if (savedPassword != null && savedPassword == password) {
-            val userName = sharedPreferences.getString("name_for_$email", "Jugador")
-            sharedPreferences.edit().putString("logged_in_user", email).apply()
-            Toast.makeText(this, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
-            showWelcomeScreen(userName ?: "Jugador")
-        } else {
-            Toast.makeText(this, "Email o contraseña incorrectos", Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch {
+            try {
+                val request = AuthRequest(login = email, password = password)
+                val response = ApiClient.instance.login(request)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    response.body()?.data?.token?.let {
+                        authToken = it
+                        Toast.makeText(this@MainActivity, "Inicio de sesión exitoso", Toast.LENGTH_SHORT).show()
+                        fetchUserProfile()
+                    }
+                } else {
+                    val errorMsg = response.body()?.message ?: "Credenciales incorrectas."
+                    Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Error de red: ${e.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
-    private fun loadShopData() {
-        shopView.setCoins(sharedPreferences.getInt("coins", 100))
+    private fun fetchUserProfile() {
+        lifecycleScope.launch {
+            val token = authToken
+            if (token == null) {
+                showLoginScreen() // Asegurarse de volver al login si no hay token
+                return@launch
+            }
+            try {
+                val response = ApiClient.instance.getProfile("Bearer $token")
+                if (response.isSuccessful && response.body()?.success == true) {
+                    response.body()?.data?.profile?.let {
+                        showWelcomeScreen(it.username, it.monedas)
+                    }
+                } else {
+                    Toast.makeText(this@MainActivity, "Sesión expirada.", Toast.LENGTH_SHORT).show()
+                    authToken = null
+                    showLoginScreen()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Error de red al cargar perfil.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun performPurchase(cost: Int) {
+        val token = authToken
+        if (token == null) {
+            Toast.makeText(this, "Debes iniciar sesión para comprar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            try {
+                val request = SpendCoinsRequest(amount = cost)
+                val response = ApiClient.instance.spendCoins("Bearer $token", request)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val newCoinTotal = response.body()?.data?.monedasRestantes
+                    if (newCoinTotal != null) {
+                        shopView.setCoins(newCoinTotal)
+                        saveOwnedSkins()
+                        Toast.makeText(this@MainActivity, "¡Skin comprada!", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    val errorMsg = response.body()?.message ?: "No se pudo completar la compra."
+                    Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Error de red: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun loadLocalShopData() {
         val ownedSkinsStr = sharedPreferences.getStringSet("owned_skins", setOf())
         shopView.setOwnedSkins(ownedSkinsStr?.mapNotNull { it.toIntOrNull() }?.toSet() ?: setOf())
         shopView.setSelectedSkin(sharedPreferences.getInt("selected_skin", R.drawable.ship1blue))
     }
 
-    private fun saveOwnedSkinsAndCoins() {
+    private fun saveOwnedSkins() {
         sharedPreferences.edit().apply {
             putStringSet("owned_skins", shopView.getOwnedSkins().map { it.toString() }.toSet())
-            putInt("coins", shopView.getCoins())
             apply()
         }
     }
@@ -217,8 +259,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         SoundManager.playMenuMusic(this)
-        if (shopContainer.visibility == View.VISIBLE) {
-            loadShopData()
+        if (authToken != null && shopContainer.visibility == View.VISIBLE) {
+            fetchUserProfile()
         }
     }
 
