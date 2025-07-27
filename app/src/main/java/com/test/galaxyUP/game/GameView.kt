@@ -465,4 +465,5 @@ class GameView(context: Context, private val selectedSkinRes: Int) : SurfaceView
         gameThread?.setRunning(true)
         if (gameThread?.state == Thread.State.NEW) { gameThread?.start() }
     }
+    fun getTimePlayed(): Float = gameTimeSeconds
 }
