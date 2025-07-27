@@ -1,4 +1,3 @@
-// En: com/test/galaxyUP/ui/HighscoreAdapter.kt
 package com.test.galaxyUP.ui
 
 import android.view.LayoutInflater
@@ -7,10 +6,9 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.test.galaxyUP.R
-import com.test.galaxyUP.entities.ScoreEntry
+import com.test.galaxyUP.api.LeaderboardEntry
 
-class HighscoreAdapter(private val scores: List<ScoreEntry>) :
-    RecyclerView.Adapter<HighscoreAdapter.ScoreViewHolder>() {
+class HighscoreAdapter(private val scores: List<LeaderboardEntry>) : RecyclerView.Adapter<HighscoreAdapter.ScoreViewHolder>() {
 
     class ScoreViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val rankTextView: TextView = view.findViewById(R.id.rankTextView)
@@ -19,16 +17,15 @@ class HighscoreAdapter(private val scores: List<ScoreEntry>) :
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ScoreViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.highscore_item, parent, false)
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.highscore_item, parent, false)
         return ScoreViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: ScoreViewHolder, position: Int) {
-        val entry = scores[position]
+        val scoreEntry = scores[position]
         holder.rankTextView.text = "${position + 1}."
-        holder.nameTextView.text = entry.playerName
-        holder.scoreTextView.text = entry.score.toString()
+        holder.nameTextView.text = scoreEntry.usuario.username
+        holder.scoreTextView.text = scoreEntry.puntuacion.toString()
     }
 
     override fun getItemCount() = scores.size
