@@ -6,7 +6,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object ApiClient {
-    private const val BASE_URL = "https://https://upgalactics.ddns.net/api/"
+    private const val BASE_URL = "https://upgalactics.ddns.net/api/"
 
     val instance: ApiService by lazy {
         val logging = HttpLoggingInterceptor().apply {
